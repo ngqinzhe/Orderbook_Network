@@ -5,7 +5,7 @@
 #include <boost/bind/bind.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include "new_OrderBook.h"
-
+#include <time.h>
 
 using namespace boost::asio;
 using ip::tcp;
@@ -106,7 +106,8 @@ public:
                 }
             }
             _orderBook->print();
-            std::cout << "Orderbook updated." << std::endl;
+            time_t myTime = time(NULL);
+            std::cout << "Orderbook updated at " << ctime(&myTime) << std::endl;
         }
         else 
         {

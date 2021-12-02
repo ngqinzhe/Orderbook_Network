@@ -12,6 +12,7 @@ int main(int argc, char* argv[])
     // parse input
     std::vector<std::string> result;
     std::string input;
+    std::cout << "Input your order details:\n";
     while (std::cin >> input) {
         if (input == "END") break;
         result.push_back(input);
