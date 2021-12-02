@@ -73,7 +73,7 @@ public:
             {
                 if (orderbuf[i] == "CXL") {
                     std::string orderId = orderbuf[i + 1];
-                    OB::cancelOrder((*_orderBook), orderId);
+                    _orderBook->cancelOrder(orderId);
                     i += 1;
                     continue;
                 }
@@ -87,11 +87,11 @@ public:
                         std::shared_ptr<OB::Order> order = std::make_shared<OB::Order>(p, q, n, t);
                         if (t == "B") {
                             _orderBook->insert(order);
-                            OB::limitOrderMatch((*_orderBook));
+                            _orderBook->limitOrderMatch();
                         }
                         else {
                             _orderBook->insert(order);
-                            OB::limitOrderMatch((*_orderBook));
+                            _orderBook->limitOrderMatch();
                         }
                         i += 5;
                         continue;
@@ -99,7 +99,7 @@ public:
                     else if (orderType == "MO") {
                         int p = 0;
                         std::shared_ptr<OB::Order> order = std::make_shared<OB::Order>(p, q, n, t);
-                        OB::marketOrderMatch((*_orderBook), order);
+                        _orderBook->marketOrderMatch(order);
                         i += 4;
                         continue;
                     }

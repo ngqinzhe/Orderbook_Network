@@ -21,23 +21,25 @@ namespace OB {
         std::string get();
     };
     class Orderbook {
-    public:
+    private:
         std::vector<std::shared_ptr<Order> > bo;
         std::vector<std::shared_ptr<Order> > so;
+    public:
         Orderbook();
         ~Orderbook();
         std::vector<std::shared_ptr<Order> > buyOrderbook();
         std::vector<std::shared_ptr<Order> > sellOrderbook();
         void insert(std::shared_ptr<Order> o);
         void print();
+        void limitOrderMatch();
+        void marketOrderMatch(std::shared_ptr<Order> o);
+        void iocOrderMatch(std::shared_ptr<Order> o);
+        void cancelOrder(std::string orderId);
+        void fillorkillOrder(std::shared_ptr<Order> o);
+        void cancelReplaceOrder(std::string orderId, int quantity, int price);
+        void icebergOrder(std::shared_ptr<Order> o);
     };
-    void limitOrderMatch(Orderbook &ob);
-    void marketOrderMatch(Orderbook &ob, std::shared_ptr<Order> o);
-    void iocOrderMatch(Orderbook &ob, std::shared_ptr<Order> o);
-    void cancelOrder(Orderbook &ob, std::string orderId);
-    void fillorkillOrder(Orderbook &ob, std::shared_ptr<Order> o);
-    void cancelReplaceOrder(Orderbook &ob, std::string orderId, int quantity, int price);
-    void icebergOrder(Orderbook &ob, std::shared_ptr<Order> o);
+    
 }
 
 #endif
