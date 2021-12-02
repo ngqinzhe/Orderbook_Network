@@ -18,7 +18,7 @@ brew install asio
 ## Compiling the program
 Since C++ is platform dependent, it is recommended that you compile it on your local machine before trying to run it.
 
-Locate your boost and ASIO lib folders, and add them after the `-I` include flag as such to compile the programs. For me, the containing folder is /opt/homebrew/Cellar/boost/1.76.0/include. 
+Locate your boost and ASIO lib folders, and add them after the `-I` include flag as such to compile the programs. For me, the containing folder is `/opt/homebrew/Cellar/boost/1.76.0/include`. 
 
 You need to compile both the server and client.
 ```
