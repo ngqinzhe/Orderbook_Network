@@ -284,7 +284,7 @@ void OB::Orderbook::cancelReplaceOrder(std::string orderId, int quantity, int pr
             if (price <= this->bo[0]->price) return;
             int original_price = this->so[i]->price;
             this->so.erase(this->so.begin() + i);
-            std::shared_ptr<OB::Order> o = std::make_shared<OB::Order>(price, quantity, orderId, "B");
+            std::shared_ptr<OB::Order> o = std::make_shared<OB::Order>(price, quantity, orderId, "S");
             if (original_price == price) this->so.insert(this->so.begin() + i, o);
             else this->insert(o);
             return;
