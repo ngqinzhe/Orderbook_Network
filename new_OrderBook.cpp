@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <iostream>
+#include <sstream>
 #include "new_OrderBook.h"
 
 //standard orders
@@ -17,7 +20,7 @@ OB::Order::Order(int p, int q, std::string n, std::string t, int dis) {
     this->display = dis;
 }
 
-std::string OB::Order::get() {
+std::string OB::Order::getID() const {
     std::string ans;
     ans = std::to_string(this->quantity) + '@' + std::to_string(this->price) + '#' + this->name;
     if (this->display != 0) ans = std::to_string(this->display) + "(" + std::to_string(this->quantity) + ")" + '@' + std::to_string(this->price) + '#' + this->name;
@@ -25,283 +28,299 @@ std::string OB::Order::get() {
 }
 
 OB::Orderbook::Orderbook() {
-    bo = std::vector<std::shared_ptr<OB::Order> >();
-    so = std::vector<std::shared_ptr<OB::Order> >();
+    bo = std::multimap<int, Order, std::greater<int>>();
+    so = std::multimap<int, Order, std::less<int>>();
+    mob = std::map<std::string, buyIter>();
+    mos = std::map<std::string, sellIter>();
 }
 
-OB::Orderbook::~Orderbook() {}
 
-void OB::Orderbook::insert(std::shared_ptr<OB::Order> o) {
-    if (o->type == "B") {
-        bo.push_back(o);
-        std::sort(bo.begin(), bo.end(), [&](std::shared_ptr<OB::Order> o1, std::shared_ptr<OB::Order> o2) 
-        {
-            return o1->price > o2->price;
-        });
+void OB::Orderbook::insert(Order& o) {
+    // o.isBuy() == 1 if it is a "B" order
+    int orderPrice = o.getPrice();
+    std::string orderName = o.getName();
+    // place an iterator in another map, to ensure o(1) deletion of orders
+    if (o.isBuy()) {
+        this->bo.insert(std::pair<int, Order>(orderPrice, o));
+        auto it = this->bo.find(orderPrice);
+        while (it->second.getName() != orderName) it++;
+        mob.insert(std::pair<std::string, buyIter>(orderName, it));
     }
     else {
-        so.push_back(o);
-        std::sort(so.begin(), so.end(), [&](std::shared_ptr<OB::Order> o1, std::shared_ptr<OB::Order> o2) 
-        {
-            return o1->price < o2->price;
-        });
+        this->so.insert(std::pair<int, Order>(orderPrice, o));
+        auto it = this->so.find(orderPrice);
+        while (it->second.getName() != orderName) it++;
+        mob.insert(std::pair<std::string, sellIter>(orderName, it));
     }
 }
 
-void OB::Orderbook::print() {
+void OB::Orderbook::print() const {
     std::cout << "B: ";
-    for (std::vector<std::shared_ptr<OB::Order> >::const_iterator it = bo.begin(); it != bo.end(); it++) {
-        std::cout << (*it)->get() << " "; 
+    for (std::multimap<int, Order>::const_iterator it = this->bo.begin(); it != this->bo.end(); it++) {
+        std::cout << it->second.getID() << " "; 
     }
     std::cout << std::endl;
     std::cout << "S: ";
-    for (std::vector<std::shared_ptr<OB::Order> >::const_iterator it = so.begin(); it != so.end(); it++) {
-        std::cout << (*it)->get() << " "; 
+    for (std::multimap<int, Order>::const_iterator it = this->so.begin(); it != this->so.end(); it++) {
+        std::cout << it->second.getID() << " "; 
     }
     std::cout << std::endl; 
 }
 
 void OB::Orderbook::limitOrderMatch() {
     if (this->bo.size() == 0 || this->so.size() == 0) {
-        //std::cout << "0" << std::endl;
+        std::cout << "0" << std::endl;
         return;
     }
     
-    int b_price = this->bo[0]->price;
-    int s_price = this->so[0]->price;
+    int b_price = this->bo.begin()->second.getPrice();
+    int s_price = this->so.begin()->second.getPrice();
+    // Order matching occurs when there is a buy price higher than OR equal to selling price
     if (b_price >= s_price) {
-        int b_qty = this->bo[0]->quantity;
-        int s_qty = this->so[0]->quantity;
-        if (this->so[0]->display != 0) {
-            s_qty = this->so[0]->display;
+        int b_qty = this->bo.begin()->second.getQuantity();
+        int s_qty = this->so.begin()->second.getQuantity();
+
+        // IF the orders have a display price, ICE Order
+        if (this->so.begin()->second.getDisplay() != 0) {
+            s_qty = this->so.begin()->second.getDisplay();
         }
-        if (this->bo[0]->display != 0) {
-            b_qty = this->bo[0]->display;
+        if (this->bo.begin()->second.getDisplay() != 0) {
+            b_qty = this->bo.begin()->second.getDisplay();
         }
+
+        // MATCH THE LIMIT ORDERS
+
+        // if buy quantity is less than sell quantity, then we erase all buy quantity
         if (b_qty < s_qty) {
             this->bo.erase(this->bo.begin());
-            this->so[0]->quantity -= b_qty;
+            
+            this->so.begin()->second.deductQuantity(b_qty);
             std::cout << s_price * b_qty << std::endl;
             return;
         } 
+        // if sell quantity is less than buy quantity, we erase all sell quantity
         else if (b_qty > s_qty){
-            this->so.erase(this->so.begin());
-            this->bo[0]->quantity -= s_qty;
+            this->so.erase(so.begin());
+            this->bo.begin()->second.deductQuantity(s_qty);
             std::cout << s_qty * s_price << std::endl;
-            return;
         }
+        // IF Sell Quantity == Buy Quantity
         else {
-            this->bo.erase(this->bo.begin());
-            this->so.erase(this->so.begin());
+            this->bo.erase(bo.begin());
+            this->so.erase(so.begin());
         }
     } 
-    //std::cout << "0" << std::endl;
+    std::cout << "0" << std::endl;
 }
 
-void OB::Orderbook::marketOrderMatch(std::shared_ptr<OB::Order> o) {
+void OB::Orderbook::marketOrderMatch(Order& o) {
     //check if opposite sides are empty 
     int total = 0;
-    while (o->quantity != 0) {
-        if ((this->bo.size() == 0 && o->type == "S") || (this->so.size() == 0 && o->type == "B")) break;
+
+    // we will try to fill all the quantity available in this market order
+    while (o.getQuantity() != 0) {
+        // no orders to fill, market order ENDS
+        if ((this->bo.size() == 0 && !o.isBuy()) || (this->so.size() == 0 && o.isBuy())) break;
         
-        int initial_qty = o->quantity;
-        int initial_price = o->type == "B" ? this->so[0]->price : this->bo[0]->price;
+        int initial_qty = o.getQuantity();
+        int initial_price = o.isBuy() ? this->so.begin()->second.getPrice() : this->bo.begin()->second.getPrice();
         
-        if (o->type == "B") {
-            if (initial_qty < this->so[0]->quantity) {
-                this->so[0]->quantity -= initial_qty;
+        // if it is a MARKET BUY ORDER
+        if (o.isBuy()) {
+            // if order quantity is less than the top SELL ORDER
+            if (initial_qty < this->so.begin()->second.getQuantity()) {
+                this->so.begin()->second.deductQuantity(initial_qty);
                 total += initial_qty * initial_price;
             }
+            // if order quantity is more than the top SELL ORDER, deduct then loop through again
             else {
-                int trade_qty = this->so[0]->quantity;
-                this->so.erase(this->so.begin());
+                int trade_qty = this->so.begin()->second.getQuantity();
+                this->so.erase(so.begin());
                 total += trade_qty * initial_price;
             }
         }
+        // if it is MARKET SELL ORDER
         else {
-            if (initial_qty < this->bo[0]->quantity) {
-                this->bo[0]->quantity -= initial_qty;
+            // if order quantity is less than the top BUY ORDER
+            if (initial_qty < this->bo.begin()->second.getQuantity()) {
+                this->bo.begin()->second.deductQuantity(initial_qty);
                 total += initial_qty * initial_price;
             }
+            // if order quantity is more than the top BUY ORDER, deduct then loop through again
             else {
-                int trade_qty = this->bo[0]->quantity;
-                this->bo.erase(this->bo.begin());
+                int trade_qty = this->bo.begin()->second.getQuantity();
+                this->bo.erase(bo.begin());
                 total += trade_qty * initial_price;
             }
         }
     }
-    std::cout << "Trade occured for a total of: $" << total << std::endl;
+    std::cout << total << std::endl;
 }
 
-void OB::Orderbook::iocOrderMatch(std::shared_ptr<OB::Order> o) {
-    if (o->type == "B" && o->price >= this->so[0]->price) {
-        if (o->quantity < this->so[0]->quantity) {
-            this->so[0]->quantity -= o->quantity;
-            std::cout << o->quantity * this->so[0]->price << std::endl;
-        }
-        else {
-            int trade_qty = this->so[0]->quantity;
-            int trade_price = this->so[0]->price;
-            this->so.erase(this->so.begin());
-            std::cout << trade_qty * trade_price << std::endl;
-        }
-    
+std::string OB::Orderbook::cancelOrder(const std::string& orderId) {
+    if (this->mob.find(orderId) == this->mob.end() && this->mos.find(orderId) == this->mos.end()) {
+        std::cout << "No existing match for order: " << orderId << " to be canceled." << std::endl;
+        return "";
     }
-    else if (o->type == "S" && o->price <= this->bo[0]->price) {
-        if (o->quantity < this->bo[0]->quantity) {
-            this->bo[0]->quantity -= o->quantity;
-            std::cout << o->quantity * this->bo[0]->price << std::endl;
-        }
-        else {
-            int trade_qty = this->bo[0]->quantity;
-            int trade_price = this->bo[0]->price;
-            this->bo.erase(this->bo.begin());
-            std::cout << trade_qty * trade_price << std::endl;
-        }
-    
-    }
-}
-
-void OB::Orderbook::cancelOrder(std::string orderId) {
-    for (int i = 0; i < this->bo.size(); i++) {
-        if (this->bo[i]->name == orderId) {
-            this->bo.erase(this->bo.begin() + i);
-            return;
-        }
-    }
-
-    for (int i = 0; i < this->so.size(); i++) {
-        if (this->so[i]->name == orderId) {
-            this->so.erase(this->so.begin() + i);
-            return;
-        }
-    }
-}
-
-void OB::Orderbook::fillorkillOrder(std::shared_ptr<OB::Order> o) {
-    int order_qty = o->quantity;
-    if (o->type == "B") {
-        if (o->price >= this->so[0]->price) {
-            if (o->quantity <= this->so[0]->quantity) {
-                int trade_price = this->so[0]->price;
-                this->so[0]->quantity -= order_qty;
-                if (this->so[0]->quantity == 0) {
-                    this->so.erase(this->so.begin());
-                }
-                std::cout << order_qty * trade_price << std::endl;
-                return;
-            } else {
-                int i = 0;
-                int trade_price = 0;
-                int remainder = o->quantity;
-                int last_trade = 0;
-                //while the order price is higher, we will check how many orders we can clear
-                //need to make sure remainder can be cleared
-                while (o->price >= this->so[i]->price) {
-                    if (this->so[i]->quantity >= remainder) {
-                        last_trade = remainder;
-                        remainder = 0;
-                        break;
-                    }
-                    remainder -= this->so[i]->quantity;
-                    i ++;
-                }
-                if (remainder != 0) {
-                    std::cout << 0 << std::endl;
-                    return;
-                }
-                //remove cleared orders and add qty and price to trade_price
-                for (int j = 0; j < i; j++) {
-                    trade_price += this->so[0]->price * this->so[0]->quantity;
-                    this->so.erase(this->so.begin());
-                }
-                this->so[0]->quantity -= last_trade;
-                trade_price += last_trade * this->so[0]->price;
-                std::cout << trade_price << std::endl;
-            }
-        }
+    //check if it is in buy
+    if (this->mob.find(orderId) != this->mob.end()) {
+        auto it = this->mob.at(orderId);
+        this->bo.erase(it);
+        return "B";
     }
     else {
-        if (o->price <= this->bo[0]->price) {
-            if (o->quantity <= this->bo[0]->quantity) {
-                int trade_price = o->price;
-                this->bo[0]->quantity -= order_qty;
-                if (this->bo[0]->quantity == 0) {
-                    this->bo.erase(this->bo.begin());
-                }
-                std::cout << order_qty * trade_price << std::endl;
-                return;
-            } else {
-                int i = 0;
-                int trade_price = 0;
-                int remainder = o->quantity;
-                int last_trade = 0;
-                //while the order price is higher, we will check how many orders we can clear
-                while (o->price <= this->bo[i]->price) {
-                    if (this->bo[i]->quantity >= remainder) {
-                        last_trade = remainder;
-                        remainder = 0;
-                        break;
-                    }
-                    remainder -= this->bo[i]->quantity;
-                    i ++;
-                }
-                if (remainder != 0) {
-                    std::cout << 0 << std::endl;
-                    return;
-                }
-                //remove cleared orders and add qty and price to trade_price
-                for (int j = 0; j < i; j++) {
-                    trade_price += this->bo[0]->price * this->bo[0]->quantity;
-                    this->bo.erase(this->bo.begin());
-                }
-                // delete the quantity
-                this->bo[0]->quantity -= last_trade;
-                trade_price += this->bo[0]->price * last_trade;
-                std::cout << trade_price << std::endl;
-            }
-        }
+        auto it = this->mos.at(orderId);
+        this->so.erase(it);
+        return "S";
     }
 }
 
-void OB::Orderbook::cancelReplaceOrder(std::string orderId, int quantity, int price) {
-    // need to find the order in both orderbooks since only the name is given
-    for (int i = 0; i < this->bo.size(); i++) {
-        if (this->bo[i]->name == orderId) {
-            if (price >= this->so[0]->price) return;
-            int original_price = this->bo[i]->price;
-            this->bo.erase(this->bo.begin() + i);
-            std::shared_ptr<OB::Order> o = std::make_shared<OB::Order>(price, quantity, orderId, "B");
-            if (original_price == price) this->bo.insert(this->bo.begin() + i, o);
-            else this->insert(o);
-            return;
+void OB::Orderbook::iocOrderMatch(Order& o) {
+    // if this is a BUY ORDER, check if the price is higher than the top SELL ORDER
+    if (o.isBuy() && o.getPrice() >= this->so.begin()->second.getPrice()) {
+        // if order quantity is less than top SELL ORDER quantity, fill all the order
+        if (o.getQuantity() < this->so.begin()->second.getQuantity()) {
+            this->so.begin()->second.deductQuantity(o.getQuantity());
+            std::cout << o.getQuantity() * this->so.begin()->second.getPrice() << std::endl;
         }
-    }
-
-    //check sell side
-    for (int i = 0; i < this->so.size(); i++) {
-        if (this->so[i]->name == orderId) {
-            if (price <= this->bo[0]->price) return;
-            int original_price = this->so[i]->price;
-            this->so.erase(this->so.begin() + i);
-            std::shared_ptr<OB::Order> o = std::make_shared<OB::Order>(price, quantity, orderId, "S");
-            if (original_price == price) this->so.insert(this->so.begin() + i, o);
-            else this->insert(o);
-            return;
+        // if order quantity is more than top SELL ORDER quantity, remove the current top SELL ORDER
+        else {
+            int trade_qty = this->so.begin()->second.getQuantity();
+            int trade_price = this->so.begin()->second.getPrice();
+            this->so.erase(so.begin());
+            std::cout << trade_qty * trade_price << std::endl;
         }
-    }
-}
-
-void OB::Orderbook::icebergOrder(std::shared_ptr<OB::Order> o) {
-    std::string orderId = o->name;
-    bool isBuy = o->type == "B" ? true : false;
-    this->insert(o);
     
-    if (isBuy && this->bo[0]->name == orderId && !this->so.empty() && this->bo[0]->price >= this->so[0]->price) {
-        OB::Orderbook::limitOrderMatch();
     }
-    else if (!isBuy && this->so[0]->name == orderId && !this->bo.empty() && this->so[0]->price <= this->bo[0]->price) {
-        OB::Orderbook::limitOrderMatch();
+    // if this is a SELL ORDER
+    else if (!o.isBuy() && o.getPrice() <= this->bo.begin()->second.getPrice()) {
+        // if order quantity is less than top BUY ORDER quantity, fill all the order
+        if (o.getQuantity() < this->bo.begin()->second.getQuantity()) {
+            this->bo.begin()->second.deductQuantity(o.getQuantity());
+            std::cout << o.getQuantity() * this->bo.begin()->second.getPrice() << std::endl;
+        }
+        else {
+            int trade_qty = this->bo.begin()->second.getQuantity();
+            int trade_price = this->bo.begin()->second.getPrice();
+            this->bo.erase(bo.begin());
+            std::cout << trade_qty * trade_price << std::endl;
+        }
+    
+    }
+}
+
+void OB::Orderbook::fillorkillOrder(Order& o) {
+    if (o.isBuy()) FOKBUY(o);
+    else FOKSELL(o);
+}
+
+void OB::Orderbook::FOKBUY(Order& o) {
+    int orderPrice = o.getPrice();
+    int totalSum = 0;
+    int orderInitialQuantity = o.getQuantity();
+    // check whether full quantity can be fufilled
+    for (auto it = this->so.begin(); it != so.end(); it++) {
+        if (it->second.getPrice() <= orderPrice) orderInitialQuantity -= it->second.getQuantity();
+    }
+    if (orderInitialQuantity > 0) {
+        std::cout << "0" << std::endl;
+        return;
+    }
+    // BUY PRICE must be more than the current SELL ORDER BOOK price, else order will just kill
+    while (orderPrice >= this->so.begin()->second.getPrice()) {
+        // if the order quantity < orderbook quantity, then deduct and end
+        if (o.getQuantity() < this->so.begin()->second.getQuantity()) {
+            totalSum += o.getQuantity() * this->so.begin()->second.getPrice();
+            this->so.begin()->second.deductQuantity(o.getQuantity());
+            break;
+        } 
+        // order quantity is larger than orderbook quantity
+        else {
+            totalSum += this->so.begin()->second.getQuantity() * this->so.begin()->second.getPrice();
+            o.deductQuantity(this->so.begin()->second.getQuantity());
+            this->so.erase(this->so.begin());
+            if (o.getQuantity() == 0) break;
+        }
+    }
+    std::cout << totalSum << std::endl;
+}
+
+void OB::Orderbook::FOKSELL(Order& o) {
+    int orderPrice = o.getPrice();
+    int totalSum = 0;
+    int orderInitialQuantity = o.getQuantity();
+    // check whether full quantity can be fufilled
+    for (auto it = this->bo.begin(); it != bo.end(); it++) {
+        if (it->second.getPrice() >= orderPrice) orderInitialQuantity -= it->second.getQuantity();
+    }
+    if (orderInitialQuantity > 0) {
+        std::cout << "0" << std::endl;
+        return;
+    }
+
+    // SELL PRICE must be less than the current BUY ORDER BOOK price, else order will just kill
+    while (orderPrice <= this->bo.begin()->second.getPrice()) {
+        // if the order quantity < orderbook quantity, then deduct and end
+        if (o.getQuantity() < this->bo.begin()->second.getQuantity()) {
+            totalSum += o.getQuantity() * this->bo.begin()->second.getPrice();
+            this->bo.begin()->second.deductQuantity(o.getQuantity());
+            break;
+        } 
+        // order quantity is larger than orderbook quantity
+        else {
+            totalSum += this->bo.begin()->second.getQuantity() * this->bo.begin()->second.getPrice();
+            o.deductQuantity(this->bo.begin()->second.getQuantity());
+            this->bo.erase(this->bo.begin());
+            if (o.getQuantity() == 0) break;
+        }
+    }
+    std::cout << totalSum << std::endl;
+}
+
+void OB::Orderbook::cancelReplaceOrder(const std::string& orderId, int quantity, int price) {
+    if (this->mob.find(orderId) == this->mob.end() && this->mos.find(orderId) == this->mos.end()) {
+        std::cout << "No existing match for order: " << orderId << " to be replaced." << std::endl;
+        return;
+    }
+
+    //check if it is in buy
+    if (this->mob.find(orderId) != this->mob.end()) {
+        replaceHelper(orderId, quantity, price, 1);
+    }
+    // if it is in sell
+    else {
+        replaceHelper(orderId, quantity, price, 0);
+    }
+}
+
+void OB::Orderbook::replaceHelper(const std::string& orderId, int quantity, int price, bool side) {
+    auto it = side ? this->mob.at(orderId) : this->mos.at(orderId);    
+        // if no price change, don't cancel
+    if (it->second.getPrice() == price) {
+        it->second.setQuantity(quantity);
+        return;
+    }
+    // cancel then insert
+    else {
+        std::string side = this->cancelOrder(orderId);
+        OB::Order order(price, quantity, orderId, side);
+        std::pair<int, Order> newOrder = std::pair<int, Order>(price, order);
+        this->insert(order);
+        return;
+    }
+}
+
+void OB::Orderbook::icebergOrder(Order& o) {
+    std::string orderId = o.getName();
+    this->insert(o);
+
+    int orderPrice = o.getPrice();
+    
+    if (o.isBuy() && this->bo.begin()->second.getName() == orderId && this->so.size() != 0 && orderPrice >= this->so.begin()->second.getPrice()) {
+        limitOrderMatch();
+    }
+    else if (!o.isBuy() && this->so.begin()->second.getName() == orderId && this->bo.size() != 0 && orderPrice <= this->bo.begin()->second.getPrice()) {
+        limitOrderMatch();
     }
 
 }

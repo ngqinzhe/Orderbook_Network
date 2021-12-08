@@ -84,7 +84,7 @@ public:
                     int q = std::stoi(orderbuf[i + 4]);
                     if (orderType == "LO") {
                         int p = std::stoi(orderbuf[i + 5]);
-                        std::shared_ptr<OB::Order> order = std::make_shared<OB::Order>(p, q, n, t);
+                        OB::Order order(p, q, n, t);
                         if (t == "B") {
                             _orderBook->insert(order);
                             _orderBook->limitOrderMatch();
@@ -98,7 +98,7 @@ public:
                     }
                     else if (orderType == "MO") {
                         int p = 0;
-                        std::shared_ptr<OB::Order> order = std::make_shared<OB::Order>(p, q, n, t);
+                        OB::Order order(p, q, n, t);
                         _orderBook->marketOrderMatch(order);
                         i += 4;
                         continue;
