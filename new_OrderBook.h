@@ -5,9 +5,12 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <algorithm>
+#include <iostream>
+#include <sstream>
 #include <functional>
 
-namespace OB {
+namespace trading {
     class Order {
     private:
         int price;
@@ -20,38 +23,41 @@ namespace OB {
         Order(int p, int q, std::string n, std::string t);
         Order(int p, int q, std::string n, std::string t, int dis);
 
-        // bool operator< (int& x, const Order& rhs) const {return x < rhs.price;}
-        // bool operator> (int& x, const Order& rhs) const {return x > rhs.price;}
-
-        // get price
+        // ORDER FUNCTIONALITIES
         int getPrice() const {return this->price;}
         int getQuantity() const {return this->quantity;}
         std::string getName() const {return this->name;}
         bool isBuy() const {return this->type == "B";}
+        bool isIceberg() const {return this->display != 0;}
         int getDisplay() const {return this->display;}
+        void setDisplay(int _display) {this->display = _display;}
         void setQuantity(int _quantity) {this->quantity = _quantity;}
-
         void deductQuantity(int change) {this->quantity -= change;}
         std::string getID() const;
     };
 
     class Orderbook {
     private:
-
-        std::multimap<int, Order, std::greater<int>> bo;
-        std::multimap<int, Order, std::less<int>> so;
-
+        // TYPE DEFINITIONS
         typedef std::multimap<int, Order, std::greater<int>>::iterator buyIter;
         typedef std::multimap<int, Order, std::less<int>>::iterator sellIter;
+        typedef std::map<std::string, buyIter> mobIter;
+        typedef std::map<std::string, sellIter> mosIter;
         
+        // CONTAINERS -> DATA STRUCTURES
+        std::multimap<int, Order, std::greater<int>> bo;
+        std::multimap<int, Order, std::less<int>> so;
         std::map<std::string, buyIter> mob;
         std::map<std::string, sellIter> mos;
 
-        typedef std::map<std::string, buyIter> mobIter;
-        typedef std::map<std::string, sellIter> mosIter;
-
+        // HELPER FUNCTIONS
         void FOKBUY(Order& o);
         void FOKSELL(Order& o);
+        void replaceHelper(const std::string& orderId, int quantity, int price, bool side);
+        void ICEBUY(Order& o);
+        void ICESELL(Order& o);
+        void ICELIMIT(int bQty, int sQty);
+
     public:
         Orderbook();
         void insert(Order& o);
@@ -62,11 +68,7 @@ namespace OB {
         std::string cancelOrder(const std::string& orderId);
         void fillorkillOrder(Order& o);
         void cancelReplaceOrder(const std::string& orderId, int quantity, int price);
-        void replaceHelper(const std::string& orderId, int quantity, int price, bool side);
         void icebergOrder(Order& o);
     };
-
-    
-
 }
 #endif

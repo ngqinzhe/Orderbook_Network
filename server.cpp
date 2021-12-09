@@ -20,17 +20,17 @@ private:
     enum { max_length = 1024};
     //char data[max_length];
     std::vector<std::string> orderbuf = std::vector<std::string>(7);
-    OB::Orderbook* _orderBook;
+    trading::Orderbook* _orderBook;
 
 public:
     typedef boost::shared_ptr<ConnectionHandler> pointer;
-    ConnectionHandler(boost::asio::io_context& io_context, OB::Orderbook& orderBook) : sock(io_context) 
+    ConnectionHandler(boost::asio::io_context& io_context, trading::Orderbook& orderBook) : sock(io_context) 
     {
         _orderBook = &orderBook;
     }
     
     // pointer creation
-    static pointer create(boost::asio::io_context& io_context, OB::Orderbook& orderBook)
+    static pointer create(boost::asio::io_context& io_context, trading::Orderbook& orderBook)
     {
         return pointer(new ConnectionHandler(io_context, orderBook));
     }
@@ -65,7 +65,7 @@ public:
         if (!err) 
         {
             std::cout << "FROM CLIENT: ";
-            for (const std::string x : orderbuf)
+            for (const std::string& x : orderbuf)
                 std::cout << x << " ";
             std::cout << std::endl;
 
@@ -84,7 +84,7 @@ public:
                     int q = std::stoi(orderbuf[i + 4]);
                     if (orderType == "LO") {
                         int p = std::stoi(orderbuf[i + 5]);
-                        OB::Order order(p, q, n, t);
+                        trading::Order order(p, q, n, t);
                         if (t == "B") {
                             _orderBook->insert(order);
                             _orderBook->limitOrderMatch();
@@ -98,7 +98,7 @@ public:
                     }
                     else if (orderType == "MO") {
                         int p = 0;
-                        OB::Order order(p, q, n, t);
+                        trading::Order order(p, q, n, t);
                         _orderBook->marketOrderMatch(order);
                         i += 4;
                         continue;
@@ -134,7 +134,7 @@ class Server
 {
 private:
     tcp::acceptor acceptor_;
-    OB::Orderbook ob;
+    trading::Orderbook ob;
 
 private:    
     void start_accept()
@@ -150,7 +150,7 @@ private:
 public:
     Server(boost::asio::io_context& io_context) : acceptor_(io_context, tcp::endpoint(tcp::v4(), 1234))
     {
-        ob = OB::Orderbook();
+        ob = trading::Orderbook();
         start_accept();
     }
 
